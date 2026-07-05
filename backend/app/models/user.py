@@ -1,9 +1,4 @@
-from sqlalchemy import (
-    Column,
-    Integer,
-    String,
-    DateTime
-)
+from sqlalchemy import Column, Integer, String, DateTime
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
@@ -28,10 +23,7 @@ class User(Base):
         server_default=func.now()
     )
 
-    last_login = Column(DateTime(timezone=True), nullable=True)
-
     assets = relationship(
         "VaultAsset",
-        back_populates="owner",
-        cascade="all, delete-orphan"
+        back_populates="owner"
     )
