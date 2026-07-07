@@ -54,8 +54,8 @@ def login(
 ):
 
     user = db.query(User).filter(
-        User.email == form_data.username
-    ).first()
+    User.username == form_data.username
+).first()
 
     if not user:
         raise HTTPException(
@@ -74,7 +74,7 @@ def login(
 
     token = create_access_token(
         {
-            "sub": user.email
+            "sub": user.username
         }
     )
 
@@ -82,7 +82,6 @@ def login(
         "access_token": token,
         "token_type": "bearer"
     }
-
 
 @router.get("/me")
 def me(

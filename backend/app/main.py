@@ -1,12 +1,13 @@
 from contextlib import asynccontextmanager
 from app.api.routes.auth import router as auth_router
-
+from app.api import assets
 from fastapi import FastAPI
 
 from app.database import Base
 from app.database import engine
 
 import app.models
+
 
 
 @asynccontextmanager
@@ -23,8 +24,9 @@ app = FastAPI(
     description="Cloud Native Secure Asset Vault",
     lifespan=lifespan
 )
-app.include_router(auth_router)
 
+app.include_router(auth_router)
+app.include_router(assets.router)
 
 @app.get("/")
 def root():

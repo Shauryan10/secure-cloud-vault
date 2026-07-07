@@ -41,6 +41,12 @@ def create_access_token(data: dict):
         algorithm=ALGORITHM
     )
 
+def decode_access_token(token: str):
+    return jwt.decode(
+        token,
+        SECRET_KEY,
+        algorithms=[ALGORITHM]
+    )
 
 def verify_token(token: str):
     try:
