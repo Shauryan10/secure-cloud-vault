@@ -1,10 +1,11 @@
 from pathlib import Path
+import os
 import hashlib
 import shutil
-
-from fastapi import APIRouter, Depends, File, UploadFile
+from fastapi.responses import FileResponse
+from fastapi import APIRouter,HTTPException,Depends, File, UploadFile
 from sqlalchemy.orm import Session
-
+from app.schemas.asset import AssetResponse
 from app.database import get_db
 from app.models.asset import VaultAsset
 from app.models.user import User
@@ -51,7 +52,103 @@ async def upload_file(
     db.refresh(asset)
 
     return {
-        "message": "File uploaded successfully",
-        "asset_id": asset.id,
-        "sha256": asset.sha256_hash,
-    }
+    "message": "Asset uploaded successfully",
+    "asset_id": asset.id,
+    "asset_name": asset.asset_name,
+    "classification": asset.classification,
+    "sha256": asset.sha256_hash,
+}
+
+@router.get("/", response_model=list[AssetResponse])
+def get_my_assets(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    assets = (
+        db.query(VaultAsset)
+        .filter(VaultAsset.owner_id == current_user.id)
+        .all()
+    )
+
+    return assets
+
+@router.get("/{asset_id}", response_model=AssetResponse)
+def get_asset(
+    asset_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    asset = (
+        db.query(VaultAsset)
+        .filter(
+            VaultAsset.id == asset_id,
+            VaultAsset.owner_id == current_user.id
+        )
+        .first()
+    )
+
+    if not asset:
+        raise HTTPException(
+            status_code=404,
+            detail="Asset not found"
+        )
+
+    return asset
+
+@router.get("/{asset_id}/download")
+def download_asset(
+    asset_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    asset = (
+        db.query(VaultAsset)
+        .filter(
+            VaultAsset.id == asset_id,
+            VaultAsset.owner_id == current_user.id
+        )
+        .first()
+    )
+
+    if not asset:
+        raise HTTPException(
+            status_code=404,
+            detail="Asset not found"
+        )
+
+    return FileResponse(
+        asset.storage_key,
+        filename=asset.asset_name,
+        media_type=asset.content_type
+    )
+@router.delete("/{asset_id}")
+def delete_asset(
+    asset_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    asset = (
+        db.query(VaultAsset)
+        .filter(
+            VaultAsset.id == asset_id,
+            VaultAsset.owner_id == current_user.id
+        )
+        .first()
+    )
+
+    if not asset:
+        raise HTTPException(
+            status_code=404,
+            detail="Asset not found"
+        )
+
+    if os.path.exists(asset.storage_key):
+        os.remove(asset.storage_key)
+
+    db.delete(asset)
+    db.commit()
+
+    return {
+    "message": "Asset deleted successfully",
+    "asset_id": asset.id
+}
