@@ -1,22 +1,22 @@
 
 
-services:
+  services:
 
-  mysql:
-    image: mysql:8.4
-    container_name: secure-vault-db
+    mysql:
+      image: mysql:8.4
+      container_name: secure-vault-db
 
-    restart: always
+      restart: always
 
-    environment:
-      MYSQL_ROOT_PASSWORD: root123
-      MYSQL_DATABASE: secure_cloud_vault
+      environment:
+        MYSQL_ROOT_PASSWORD: root123
+        MYSQL_DATABASE: secure_cloud_vault
 
-    ports:
-      - "3307:3306"
+      ports:
+        - "3307:3306"
 
-    volumes:
-      - mysql-data:/var/lib/mysql
+      volumes:
+        - mysql-data:/var/lib/mysql
 
-volumes:
-  mysql-data:
+  volumes:
+    mysql-data:

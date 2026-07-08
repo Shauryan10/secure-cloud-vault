@@ -1,9 +1,9 @@
-from pathlib import Path
+from io import BytesIO
 import os
 import hashlib
-import shutil
 from fastapi.responses import FileResponse
 from fastapi import APIRouter,HTTPException,Depends, File, UploadFile
+from app.services.s3_service import upload_file
 from sqlalchemy.orm import Session
 from app.schemas.asset import AssetResponse
 from app.database import get_db
@@ -11,13 +11,11 @@ from app.models.asset import VaultAsset
 from app.models.user import User
 from app.security.dependencies import get_current_user
 
+
 router = APIRouter(
     prefix="/assets",
     tags=["Assets"]
 )
-
-UPLOAD_DIR = Path("uploads")
-UPLOAD_DIR.mkdir(exist_ok=True)
 
 @router.post("/upload")
 async def upload_file(
@@ -25,26 +23,24 @@ async def upload_file(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    file_path = UPLOAD_DIR / file.filename
+    content = await file.read()
 
-    with open(file_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
+    sha256 = hashlib.sha256(content).hexdigest()
 
-    sha256 = hashlib.sha256()
-
-    with open(file_path, "rb") as f:
-        while chunk := f.read(8192):
-            sha256.update(chunk)
+    storage_key = upload_file(
+    BytesIO(content),
+    file.filename
+)
 
     asset = VaultAsset(
         owner_id=current_user.id,
         asset_name=file.filename,
         description="Uploaded via API",
         classification="INTERNAL",
-        file_size=file_path.stat().st_size,
+        file_size=len(content),
         content_type=file.content_type,
-        sha256_hash=sha256.hexdigest(),
-        storage_key=str(file_path),
+        sha256_hash=sha256,
+        storage_key=storage_key,
     )
 
     db.add(asset)
