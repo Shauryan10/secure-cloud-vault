@@ -2,6 +2,7 @@ import boto3
 import uuid
 from os import getenv
 from dotenv import load_dotenv
+from datetime import timedelta
 
 load_dotenv()
 
@@ -31,7 +32,7 @@ def upload_file(file_obj, filename: str):
 
 
 def download_file(key: str):
-
+    print(f"Downloading {key} from S3")
     return s3.get_object(
         Bucket=BUCKET_NAME,
         Key=key
@@ -43,4 +44,15 @@ def delete_file(key: str):
     s3.delete_object(
         Bucket=BUCKET_NAME,
         Key=key
+    )
+
+def generate_presigned_url(key: str):
+
+    return s3.generate_presigned_url(
+        "get_object",
+        Params={
+            "Bucket": BUCKET_NAME,
+            "Key": key
+        },
+        ExpiresIn=300
     )

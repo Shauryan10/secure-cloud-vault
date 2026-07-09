@@ -7,6 +7,7 @@ from fastapi.responses import StreamingResponse
 from app.services.s3_service import (
     upload_file as upload_to_s3,
     download_file,
+    generate_presigned_url,
     delete_file
 )
 from sqlalchemy.orm import Session
@@ -95,6 +96,36 @@ def get_asset(
         )
 
     return asset
+
+@router.get("/{asset_id}/url")
+def get_download_url(
+    asset_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+
+    asset = (
+        db.query(VaultAsset)
+        .filter(
+            VaultAsset.id == asset_id,
+            VaultAsset.owner_id == current_user.id
+        )
+        .first()
+    )
+
+    if not asset:
+        raise HTTPException(
+            status_code=404,
+            detail="Asset not found"
+        )
+
+    url = generate_presigned_url(asset.storage_key)
+
+    return {
+        "download_url": url,
+        "expires_in": "5 minutes"
+    }
+    
 
 @router.get("/{asset_id}/download")
 def download_asset(
