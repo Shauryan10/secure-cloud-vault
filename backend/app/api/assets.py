@@ -1,9 +1,14 @@
 from io import BytesIO
-import os
+
 import hashlib
-from fastapi.responses import FileResponse
+
 from fastapi import APIRouter,HTTPException,Depends, File, UploadFile
-from app.services.s3_service import upload_file
+from fastapi.responses import StreamingResponse
+from app.services.s3_service import (
+    upload_file as upload_to_s3,
+    download_file,
+    delete_file
+)
 from sqlalchemy.orm import Session
 from app.schemas.asset import AssetResponse
 from app.database import get_db
@@ -27,7 +32,7 @@ async def upload_file(
 
     sha256 = hashlib.sha256(content).hexdigest()
 
-    storage_key = upload_file(
+    storage_key = upload_to_s3(
     BytesIO(content),
     file.filename
 )
@@ -112,11 +117,16 @@ def download_asset(
             detail="Asset not found"
         )
 
-    return FileResponse(
-        asset.storage_key,
-        filename=asset.asset_name,
-        media_type=asset.content_type
-    )
+    obj = download_file(asset.storage_key)
+
+    return StreamingResponse(
+        obj["Body"],
+        media_type=asset.content_type,
+        headers={
+            "Content-Disposition":
+            f'attachment; filename="{asset.asset_name}"'
+    }
+)
 @router.delete("/{asset_id}")
 def delete_asset(
     asset_id: int,
@@ -138,8 +148,7 @@ def delete_asset(
             detail="Asset not found"
         )
 
-    if os.path.exists(asset.storage_key):
-        os.remove(asset.storage_key)
+    delete_file(asset.storage_key)
 
     db.delete(asset)
     db.commit()
