@@ -97,10 +97,10 @@ def me(
             detail="Invalid Token"
         )
 
-    email = payload.get("sub")
+    username = payload.get("sub")
 
     user = db.query(User).filter(
-        User.email == email
+        User.username == username
     ).first()
 
     if not user:

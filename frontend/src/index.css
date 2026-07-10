@@ -1,0 +1,64 @@
+*{
+  margin:0;
+  padding:0;
+  box-sizing:border-box;
+  font-family:Arial, Helvetica, sans-serif;
+}
+
+body{
+  background:#eef2f7;
+}
+
+.container{
+  height:100vh;
+  display:flex;
+  justify-content:center;
+  align-items:center;
+}
+
+.card{
+  background:white;
+  width:400px;
+  padding:30px;
+  border-radius:10px;
+  box-shadow:0 5px 20px rgba(0,0,0,0.1);
+}
+
+.card h1{
+  text-align:center;
+  margin-bottom:10px;
+}
+
+.card h3{
+  text-align:center;
+  margin-bottom:20px;
+}
+
+.card input{
+  width:100%;
+  padding:12px;
+  margin-bottom:15px;
+}
+
+.card button{
+  width:100%;
+  padding:12px;
+  background:#2563eb;
+  color:white;
+  border:none;
+  border-radius:5px;
+}
+
+.card button:hover{
+  background:#1d4ed8;
+}
+
+.error{
+  color:red;
+  margin-top:10px;
+}
+
+.card p{
+  margin-top:15px;
+  text-align:center;
+}
