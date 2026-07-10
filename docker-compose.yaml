@@ -1,22 +1,36 @@
+services:
 
+  mysql:
+    image: mysql:8.4
+    container_name: secure-vault-db
 
-  services:
+    restart: always
 
-    mysql:
-      image: mysql:8.4
-      container_name: secure-vault-db
+    environment:
+      MYSQL_ROOT_PASSWORD: root123
+      MYSQL_DATABASE: secure_cloud_vault
 
-      restart: always
+    ports:
+      - "3307:3306"
 
-      environment:
-        MYSQL_ROOT_PASSWORD: root123
-        MYSQL_DATABASE: secure_cloud_vault
+    volumes:
+      - mysql-data:/var/lib/mysql
 
-      ports:
-        - "3307:3306"
+  backend:
+    build: ./backend
 
-      volumes:
-        - mysql-data:/var/lib/mysql
+    container_name: secure-vault-api
 
-  volumes:
-    mysql-data:
+    restart: always
+
+    ports:
+      - "8000:8000"
+
+    env_file:
+      - ./backend/.env
+
+    depends_on:
+      - mysql
+
+volumes:
+  mysql-data:

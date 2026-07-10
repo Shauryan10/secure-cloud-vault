@@ -29,7 +29,32 @@ async def upload_file(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    if not file.filename:
+        raise HTTPException(
+            status_code=400,
+            detail="No file selected."
+    )
     content = await file.read()
+    MAX_FILE_SIZE = 10 * 1024 * 1024
+
+    if len(content) > MAX_FILE_SIZE:
+        raise HTTPException(
+            status_code=400,
+            detail="File size exceeds 10 MB limit."
+    )
+
+    ALLOWED_TYPES = [
+    "application/pdf",
+    "image/png",
+    "image/jpeg",
+    "text/plain"
+]
+
+    if file.content_type not in ALLOWED_TYPES:
+        raise HTTPException(
+            status_code=400,
+            detail="Unsupported file type."
+    )
 
     sha256 = hashlib.sha256(content).hexdigest()
 
@@ -176,7 +201,7 @@ def delete_asset(
     if not asset:
         raise HTTPException(
             status_code=404,
-            detail="Asset not found"
+            detail="Asset does not exist or you don't have permission"
         )
 
     delete_file(asset.storage_key)
