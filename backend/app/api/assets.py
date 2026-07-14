@@ -58,10 +58,16 @@ async def upload_file(
 
     sha256 = hashlib.sha256(content).hexdigest()
 
-    storage_key = upload_to_s3(
-    BytesIO(content),
-    file.filename
-)
+    try:
+        storage_key = upload_to_s3(
+            BytesIO(content),
+            file.filename
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Failed to upload file to storage: {str(e)}"
+        )
 
     asset = VaultAsset(
         owner_id=current_user.id,

@@ -6,65 +6,81 @@ import AssetList from "../components/AssetList";
 
 function Dashboard() {
 
-    const [user, setUser] = useState(null);
+    const [user, setUser]     = useState(null);
     const [assets, setAssets] = useState([]);
 
+    const navigate = useNavigate();
+
     async function loadAssets() {
-
-        const res = await api.get("/assets");
-
+        const res = await api.get("/assets/");
         setAssets(res.data);
-
     }
 
     useEffect(() => {
 
         async function loadData() {
-
             const userRes = await api.get("/auth/me");
-
             setUser(userRes.data);
-
             await loadAssets();
-
         }
 
         loadData();
 
     }, []);
 
-    const navigate = useNavigate();
-
     function logout() {
         localStorage.removeItem("token");
         navigate("/");
-    }   
+    }
 
     if (!user)
-        return <h2>Loading...</h2>;
+        return (
+            <div style={{ color: "#a3e635", padding: "40px", textAlign: "center" }}>
+                Loading...
+            </div>
+        );
 
     return (
 
-        <div style={{ padding: "30px" }}>
+        <div>
 
-            <h1>Secure Cloud Vault</h1>
+            {/* ── Navbar ── */}
+            <nav className="dashboard-navbar">
 
-            <h3>Welcome {user.username}</h3>
+                <div className="navbar-profile">
 
-            <p>{user.email}</p>
+                    <div className="avatar">
+                        {user.username.charAt(0).toUpperCase()}
+                    </div>
 
-            <button onClick={logout}>
-                Logout
-            </button>
+                    <div className="profile-info">
+                        <span className="profile-username">{user.username}</span>
+                        <span className="profile-email">{user.email}</span>
+                    </div>
 
-            <hr />
+                </div>
 
-            <UploadForm refreshAssets={loadAssets} />
+                <span className="navbar-brand">Secure Cloud Vault</span>
 
-            <AssetList
-                assets={assets}
-                refreshAssets={loadAssets}
-            />
+                <button className="logout-btn" onClick={logout}>
+                    Logout
+                </button>
+
+            </nav>
+
+            {/* ── Body ── */}
+            <div className="dashboard-body">
+
+                <h2>Your Assets</h2>
+
+                <UploadForm refreshAssets={loadAssets} />
+
+                <AssetList
+                    assets={assets}
+                    refreshAssets={loadAssets}
+                />
+
+            </div>
 
         </div>
 

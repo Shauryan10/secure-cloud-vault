@@ -1,66 +1,58 @@
-    import { useState } from "react";
-    import api from "../api/api";
+import { useState } from "react";
+import api from "../api/api";
 
-    function UploadForm({ refreshAssets }) {
+function UploadForm({ refreshAssets }) {
 
-        const [file, setFile] = useState(null);
+    const [file, setFile] = useState(null);
 
-        async function upload() {
+    async function upload() {
 
-            if (!file) {
-                alert("Choose a file");
-                return;
-            }
+        if (!file) {
+            alert("Choose a file first.");
+            return;
+        }
 
-            const formData = new FormData();
-            formData.append("file", file);
+        const formData = new FormData();
+        formData.append("file", file);
 
-            try {
+        try {
 
-                await api.post(
-                    "/assets/upload",
-                    formData,
-                    {
-                        headers: {
-                            "Content-Type": "multipart/form-data"
-                        }
-                    }
-                );
+            await api.post("/assets/upload", formData, {
+                headers: { "Content-Type": "multipart/form-data" }
+            });
 
-                alert("Upload Successful");
+            setFile(null);
+            // reset the file input visually
+            document.getElementById("file-input").value = "";
+            refreshAssets();
 
-                setFile(null);
+        } catch (err) {
 
-                refreshAssets();
-
-            } catch {
-
-                alert("Upload Failed");
-
-            }
+            const detail = err.response?.data?.detail;
+            alert("Upload failed: " + (detail || "Unknown error"));
 
         }
 
-        return (
-
-            <div style={{marginBottom:"25px"}}>
-
-                <input
-                    type="file"
-                    onChange={(e)=>setFile(e.target.files[0])}
-                />
-
-                <button
-                    onClick={upload}
-                    style={{marginLeft:"10px"}}
-                >
-                    Upload
-                </button>
-
-            </div>
-
-        );
-
     }
 
-    export default UploadForm;
+    return (
+
+        <div className="upload-row">
+
+            <input
+                id="file-input"
+                type="file"
+                onChange={(e) => setFile(e.target.files[0])}
+            />
+
+            <button className="upload-btn" onClick={upload}>
+                Upload
+            </button>
+
+        </div>
+
+    );
+
+}
+
+export default UploadForm;

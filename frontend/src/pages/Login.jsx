@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import api from "../api/api";
 
 function Login() {
@@ -8,15 +8,16 @@ function Login() {
 
     const [username, setUsername] = useState("");
     const [password, setPassword] = useState("");
+    const [error, setError]       = useState("");
 
     async function handleLogin(e) {
 
         e.preventDefault();
+        setError("");
 
         try {
 
             const form = new URLSearchParams();
-
             form.append("username", username);
             form.append("password", password);
 
@@ -25,22 +26,17 @@ function Login() {
                 form,
                 {
                     headers: {
-                        "Content-Type":
-                        "application/x-www-form-urlencoded"
+                        "Content-Type": "application/x-www-form-urlencoded"
                     }
                 }
             );
 
-            localStorage.setItem(
-                "token",
-                res.data.access_token
-            );
-
+            localStorage.setItem("token", res.data.access_token);
             navigate("/dashboard");
 
-        } catch (err) {
+        } catch {
 
-            alert("Invalid Credentials");
+            setError("Invalid username or password.");
 
         }
 
@@ -48,40 +44,36 @@ function Login() {
 
     return (
 
-        <div
-            style={{
-                display: "flex",
-                justifyContent: "center",
-                marginTop: "100px"
-            }}
-        >
+        <div className="auth-container">
 
-            <form onSubmit={handleLogin}>
+            <form className="card" onSubmit={handleLogin}>
 
-                <h2>Secure Cloud Vault</h2>
+                <h1>Secure Cloud Vault</h1>
+                <h3>Sign in to your account</h3>
+
+                {error && <p className="error">{error}</p>}
 
                 <input
                     placeholder="Username"
                     value={username}
-                    onChange={(e)=>setUsername(e.target.value)}
+                    onChange={(e) => setUsername(e.target.value)}
+                    required
                 />
-
-                <br/><br/>
 
                 <input
                     type="password"
                     placeholder="Password"
                     value={password}
-                    onChange={(e)=>setPassword(e.target.value)}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
                 />
 
-                <br/><br/>
+                <button type="submit">Login</button>
 
-                <button>
-
-                    Login
-
-                </button>
+                <p>
+                    Don't have an account?{" "}
+                    <Link to="/register">Register here</Link>
+                </p>
 
             </form>
 
