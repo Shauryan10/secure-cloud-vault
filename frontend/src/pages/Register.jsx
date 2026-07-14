@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import api from "../api/api";
+import BrandLogo from "../components/BrandLogo";
 
 function Register() {
 
@@ -47,7 +48,7 @@ function Register() {
 
             <form className="card" onSubmit={handleRegister}>
 
-                <h1>Secure Cloud Vault</h1>
+                <BrandLogo />
                 <h3>Create a new account</h3>
 
                 {error && <p className="error">{error}</p>}

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import api from "../api/api";
+import BrandLogo from "../components/BrandLogo";
 
 function Login() {
 
@@ -48,7 +49,7 @@ function Login() {
 
             <form className="card" onSubmit={handleLogin}>
 
-                <h1>Secure Cloud Vault</h1>
+                <BrandLogo />
                 <h3>Sign in to your account</h3>
 
                 {error && <p className="error">{error}</p>}
@@ -73,6 +74,10 @@ function Login() {
                 <p>
                     Don't have an account?{" "}
                     <Link to="/register">Register here</Link>
+                </p>
+
+                <p>
+                    <Link to="/forgot-password">Forgot password?</Link>
                 </p>
 
             </form>
