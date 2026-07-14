@@ -1,75 +1,94 @@
 """
-Test configuration — spins up an in-memory SQLite database so tests
-never touch MySQL, S3, or any real infrastructure.
+Test configuration.
+
+Strategy:
+  - Patch app.database.engine with an in-memory SQLite engine BEFORE
+    any other app module is imported. This prevents database.py from
+    ever attempting a MySQL connection during tests.
+  - Override the get_db dependency so every request uses the same
+    SQLite session.
 """
 
 import os
-import pytest
+import sys
 
-# ── Set env vars BEFORE any app module is imported ──────────────────────────
-os.environ.setdefault("DB_HOST",     "localhost")
-os.environ.setdefault("DB_PORT",     "3306")
-os.environ.setdefault("DB_USER",     "root")
-os.environ.setdefault("DB_PASSWORD", "root")
-os.environ.setdefault("DB_NAME",     "test_db")
-os.environ.setdefault("SECRET_KEY",  "test-secret-key-for-ci")
-os.environ.setdefault("AWS_ACCESS_KEY", "testing")
-os.environ.setdefault("AWS_SECRET_KEY", "testing")
-os.environ.setdefault("AWS_REGION",     "us-east-1")
-os.environ.setdefault("S3_BUCKET",      "test-bucket")
-os.environ.setdefault("SMTP_HOST",      "smtp.gmail.com")
-os.environ.setdefault("SMTP_PORT",      "587")
-os.environ.setdefault("SMTP_USER",      "test@example.com")
-os.environ.setdefault("SMTP_PASSWORD",  "test")
-os.environ.setdefault("SMTP_FROM",      "test@example.com")
+# ── 1. Env vars must be set before pydantic-settings reads them ───────────────
+os.environ.update({
+    "DB_HOST":        "localhost",
+    "DB_PORT":        "3306",
+    "DB_USER":        "root",
+    "DB_PASSWORD":    "root",
+    "DB_NAME":        "test_db",
+    "SECRET_KEY":     "test-secret-key-for-ci",
+    "AWS_ACCESS_KEY": "testing",
+    "AWS_SECRET_KEY": "testing",
+    "AWS_REGION":     "us-east-1",
+    "S3_BUCKET":      "test-bucket",
+    "SMTP_HOST":      "smtp.gmail.com",
+    "SMTP_PORT":      "587",
+    "SMTP_USER":      "test@example.com",
+    "SMTP_PASSWORD":  "test",
+    "SMTP_FROM":      "test@example.com",
+})
 
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
-from fastapi.testclient import TestClient
+# ── 2. Build the SQLite engine BEFORE importing any app module ────────────────
+from sqlalchemy import create_engine               # noqa: E402
+from sqlalchemy.orm import sessionmaker            # noqa: E402
+from sqlalchemy.pool import StaticPool             # noqa: E402
 
-from app.database import Base, get_db
-from app.main import app
-
-# ── In-memory SQLite engine ──────────────────────────────────────────────────
-SQLALCHEMY_TEST_URL = "sqlite://"
-
-engine = create_engine(
-    SQLALCHEMY_TEST_URL,
+_sqlite_engine = create_engine(
+    "sqlite://",                          # pure in-memory, no file
     connect_args={"check_same_thread": False},
     poolclass=StaticPool,
 )
 
-TestingSessionLocal = sessionmaker(
+_TestingSessionLocal = sessionmaker(
     autocommit=False,
     autoflush=False,
-    bind=engine,
+    bind=_sqlite_engine,
 )
 
+# ── 3. Monkey-patch app.database BEFORE the app is imported ──────────────────
+import importlib                                   # noqa: E402
+import app.database as _db_module                 # noqa: E402  (triggers settings read, but NOT a connect)
 
-def override_get_db():
-    db = TestingSessionLocal()
+_db_module.engine       = _sqlite_engine
+_db_module.SessionLocal = _TestingSessionLocal
+
+# Rebind the engine on Base.metadata so create_all uses SQLite
+from sqlalchemy.orm import declarative_base        # noqa: E402
+# Re-use the same Base that models already imported
+_db_module.Base.metadata.bind = _sqlite_engine
+
+# ── 4. NOW it's safe to import the FastAPI app ────────────────────────────────
+import pytest                                      # noqa: E402
+from fastapi.testclient import TestClient          # noqa: E402
+from app.main import app                           # noqa: E402
+from app.database import Base, get_db              # noqa: E402
+
+
+# ── 5. Fixtures ───────────────────────────────────────────────────────────────
+
+@pytest.fixture(scope="session", autouse=True)
+def create_tables():
+    """Create all tables once for the whole test session on SQLite."""
+    Base.metadata.create_all(bind=_sqlite_engine)
+    yield
+    Base.metadata.drop_all(bind=_sqlite_engine)
+
+
+def _override_get_db():
+    db = _TestingSessionLocal()
     try:
         yield db
     finally:
         db.close()
 
 
-@pytest.fixture(scope="session", autouse=True)
-def create_tables():
-    """Create all tables once for the whole test session."""
-    Base.metadata.create_all(bind=engine)
-    yield
-    Base.metadata.drop_all(bind=engine)
-
-
 @pytest.fixture()
 def client():
-    """
-    Returns a TestClient with the DB dependency overridden to use
-    in-memory SQLite. Each test function gets a fresh override.
-    """
-    app.dependency_overrides[get_db] = override_get_db
-    with TestClient(app) as c:
+    """TestClient with DB wired to in-memory SQLite."""
+    app.dependency_overrides[get_db] = _override_get_db
+    with TestClient(app, raise_server_exceptions=True) as c:
         yield c
     app.dependency_overrides.clear()
