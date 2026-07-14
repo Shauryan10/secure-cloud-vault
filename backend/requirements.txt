@@ -13,6 +13,7 @@ ecdsa==0.19.2
 email-validator==2.3.0
 fastapi==0.139.0
 h11==0.16.0
+httpx==0.28.1
 idna==3.18
 Jinja2==3.1.6
 jmespath==1.1.0
@@ -24,6 +25,8 @@ pydantic==2.13.4
 pydantic-settings==2.14.2
 pydantic_core==2.46.4
 PyMySQL==1.2.0
+pytest==8.3.5
+pytest-asyncio==0.26.0
 python-dateutil==2.9.0.post0
 python-dotenv==1.2.2
 python-jose==3.5.0
