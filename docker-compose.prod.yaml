@@ -1,0 +1,88 @@
+##############################################################################
+# Production compose — pulls images from Docker Hub, no source code needed.
+#
+# Usage:
+#   1. Copy .env.prod.example → .env.prod and fill in your real values
+#   2. docker compose -f docker-compose.prod.yaml --env-file .env.prod up -d
+#
+# Or export env vars in your shell and run:
+#   docker compose -f docker-compose.prod.yaml up -d
+##############################################################################
+
+services:
+
+  # ── MySQL ───────────────────────────────────────────────────────────────────
+  mysql:
+    image: mysql:8.4
+    container_name: secure-vault-db
+    restart: always
+
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}
+      MYSQL_DATABASE:      ${DB_NAME}
+
+    ports:
+      - "3307:3306"
+
+    volumes:
+      - mysql-data:/var/lib/mysql
+
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost",
+             "-u${DB_USER}", "-p${DB_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  # ── FastAPI Backend ─────────────────────────────────────────────────────────
+  backend:
+    image: ${DOCKER_USERNAME}/secure-vault-backend:latest
+    container_name: secure-vault-api
+    restart: always
+
+    ports:
+      - "8000:8000"
+
+    environment:
+      # Database
+      DB_HOST:     mysql
+      DB_PORT:     "3306"
+      DB_USER:     ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_NAME:     ${DB_NAME}
+
+      # AWS / S3
+      AWS_ACCESS_KEY: ${AWS_ACCESS_KEY}
+      AWS_SECRET_KEY: ${AWS_SECRET_KEY}
+      AWS_REGION:     ${AWS_REGION}
+      S3_BUCKET:      ${S3_BUCKET}
+
+      # JWT
+      SECRET_KEY: ${SECRET_KEY}
+
+      # SMTP (for OTP emails)
+      SMTP_HOST:     ${SMTP_HOST}
+      SMTP_PORT:     ${SMTP_PORT}
+      SMTP_USER:     ${SMTP_USER}
+      SMTP_PASSWORD: ${SMTP_PASSWORD}
+      SMTP_FROM:     ${SMTP_FROM}
+
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+  # ── React Frontend (nginx) ──────────────────────────────────────────────────
+  frontend:
+    image: ${DOCKER_USERNAME}/secure-vault-frontend:latest
+    container_name: secure-vault-ui
+    restart: always
+
+    ports:
+      - "80:80"
+
+    depends_on:
+      - backend
+
+volumes:
+  mysql-data:
