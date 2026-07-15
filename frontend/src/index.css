@@ -75,6 +75,13 @@ body {
   background: #bef264;
 }
 
+.card button:disabled {
+  background: #d1fae5;
+  color: #6b7280;
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
 .card p {
   margin-top: 18px;
   text-align: center;
@@ -321,4 +328,177 @@ body {
   color: #999;
   padding: 40px;
   font-size: 0.95rem;
+}
+
+/* ── Step indicator ─────────────────────────────────────────────────────────── */
+.step-indicator {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 0;
+  margin-bottom: 24px;
+}
+
+.step-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative;
+  flex: 1;
+}
+
+.step-item:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  top: 14px;
+  left: 60%;
+  width: 80%;
+  height: 2px;
+  background: #e5e7eb;
+  z-index: 0;
+}
+
+.step-item:not(:last-child).active-connector::after {
+  background: #a3e635;
+}
+
+.step-dot {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: #e5e7eb;
+  color: #aaa;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.8rem;
+  font-weight: 700;
+  z-index: 1;
+  transition: background 0.3s, color 0.3s;
+}
+
+.step-dot.active {
+  background: #a3e635;
+  color: #1a1a1a;
+}
+
+.step-label {
+  margin-top: 4px;
+  font-size: 0.72rem;
+  color: #bbb;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.step-label.active {
+  color: #65a30d;
+}
+
+/* ── Captcha ────────────────────────────────────────────────────────────────── */
+.captcha-box {
+  background: #f7fee7;
+  border: 2px solid #a3e635;
+  border-radius: 10px;
+  padding: 18px;
+  text-align: center;
+  margin-bottom: 16px;
+  user-select: none;
+}
+
+.captcha-question {
+  font-size: 1.8rem;
+  font-weight: 800;
+  color: #3f6212;
+  letter-spacing: 6px;
+}
+
+/* ── OTP 6-box input ────────────────────────────────────────────────────────── */
+.otp-boxes {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  margin-bottom: 4px;
+}
+
+.otp-box {
+  width: 44px !important;
+  height: 52px;
+  text-align: center;
+  font-size: 1.4rem;
+  font-weight: 700;
+  border: 2px solid #a3e635 !important;
+  border-radius: 8px !important;
+  background: #f9fafb !important;
+  color: #1a1a1a !important;
+  padding: 0 !important;
+  margin-bottom: 0 !important;
+  outline: none;
+  transition: box-shadow 0.2s, border-color 0.2s;
+}
+
+.otp-box:focus {
+  box-shadow: 0 0 0 3px rgba(163, 230, 53, 0.35) !important;
+  background: #fff !important;
+  border-color: #65a30d !important;
+}
+
+/* ── Password strength ──────────────────────────────────────────────────────── */
+.pw-strength-wrapper {
+  margin-bottom: 8px;
+}
+
+.pw-bar-track {
+  height: 5px;
+  background: #e5e7eb;
+  border-radius: 999px;
+  overflow: hidden;
+  margin-bottom: 4px;
+}
+
+.pw-bar-fill {
+  height: 100%;
+  border-radius: 999px;
+  transition: width 0.3s ease, background 0.3s ease;
+}
+
+.pw-bar-label {
+  font-size: 0.78rem;
+  font-weight: 700;
+  display: block;
+  text-align: right;
+  margin-bottom: 6px;
+}
+
+.pw-rules {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 3px 8px;
+}
+
+.pw-rule {
+  font-size: 0.78rem;
+  color: #aaa;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  transition: color 0.2s;
+}
+
+.pw-rule.ok {
+  color: #65a30d;
+}
+
+.pw-rule-icon {
+  font-size: 0.75rem;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+/* ── card wider for register to fit rule grid ───────────────────────────────── */
+.card.wide {
+  width: 460px;
 }

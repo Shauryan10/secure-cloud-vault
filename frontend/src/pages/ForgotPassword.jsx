@@ -18,29 +18,24 @@ function ForgotPassword() {
         e.preventDefault();
         setError("");
         setLoading(true);
-
         try {
             await api.post("/auth/forgot-password", { email });
             setStep(2);
         } catch (err) {
-            const detail = err.response?.data?.detail;
-            setError(detail || "Something went wrong. Please try again.");
+            setError(err.response?.data?.detail || "Something went wrong.");
         } finally {
             setLoading(false);
         }
     }
 
-    async function handleResetPassword(e) {
+    async function handleReset(e) {
         e.preventDefault();
         setError("");
-
         if (newPassword !== confirm) {
             setError("Passwords do not match.");
             return;
         }
-
         setLoading(true);
-
         try {
             await api.post("/auth/reset-password", {
                 email,
@@ -49,31 +44,23 @@ function ForgotPassword() {
             });
             setSuccess("Password reset successfully! You can now log in.");
         } catch (err) {
-            const detail = err.response?.data?.detail;
-            setError(detail || "Failed to reset password. Please try again.");
+            setError(err.response?.data?.detail || "Failed to reset password.");
         } finally {
             setLoading(false);
         }
     }
 
     return (
-
         <div className="auth-container">
-
             <div className="card">
 
                 <BrandLogo />
-                <h3>
-                    {step === 1 ? "Forgot your password?" : "Enter OTP & new password"}
-                </h3>
+                <h3>{step === 1 ? "Forgot your password?" : "Enter OTP & new password"}</h3>
 
-                {/* step dots */}
                 <div style={{ display: "flex", justifyContent: "center", gap: "8px", marginBottom: "20px" }}>
                     {[1, 2].map(s => (
                         <div key={s} style={{
-                            width: "10px",
-                            height: "10px",
-                            borderRadius: "50%",
+                            width: "10px", height: "10px", borderRadius: "50%",
                             background: step >= s ? "#a3e635" : "#ddd",
                             transition: "background 0.3s"
                         }} />
@@ -87,36 +74,28 @@ function ForgotPassword() {
                         <p style={{ color: "#65a30d", textAlign: "center", marginBottom: "16px", fontSize: "0.95rem" }}>
                             {success}
                         </p>
-                        <Link to="/">
-                            <button type="button">Go to Login</button>
-                        </Link>
+                        <Link to="/"><button type="button">Go to Login</button></Link>
                     </>
                 ) : step === 1 ? (
-
                     <form onSubmit={handleRequestOtp}>
                         <input
                             type="email"
                             placeholder="Registered email address"
                             value={email}
-                            onChange={(e) => setEmail(e.target.value)}
+                            onChange={e => setEmail(e.target.value)}
                             required
                         />
                         <button type="submit" disabled={loading}>
                             {loading ? "Sending OTP…" : "Send OTP"}
                         </button>
-                        <p>
-                            Remember it?{" "}
-                            <Link to="/">Back to Login</Link>
-                        </p>
+                        <p>Remember it? <Link to="/">Back to Login</Link></p>
                     </form>
-
                 ) : (
-
-                    <form onSubmit={handleResetPassword}>
+                    <form onSubmit={handleReset}>
                         <input
                             placeholder="6-digit OTP"
                             value={otp}
-                            onChange={(e) => setOtp(e.target.value)}
+                            onChange={e => setOtp(e.target.value)}
                             maxLength={6}
                             inputMode="numeric"
                             required
@@ -126,21 +105,21 @@ function ForgotPassword() {
                             type="password"
                             placeholder="New password"
                             value={newPassword}
-                            onChange={(e) => setNewPassword(e.target.value)}
+                            onChange={e => setNewPassword(e.target.value)}
                             required
                         />
                         <input
                             type="password"
                             placeholder="Confirm new password"
                             value={confirm}
-                            onChange={(e) => setConfirm(e.target.value)}
+                            onChange={e => setConfirm(e.target.value)}
                             required
                         />
                         <button type="submit" disabled={loading}>
                             {loading ? "Resetting…" : "Reset Password"}
                         </button>
                         <p>
-                            Didn't get the OTP?{" "}
+                            Didn't get it?{" "}
                             <span
                                 onClick={() => { setStep(1); setError(""); }}
                                 style={{ color: "#65a30d", cursor: "pointer", fontWeight: 600 }}
@@ -149,15 +128,10 @@ function ForgotPassword() {
                             </span>
                         </p>
                     </form>
-
                 )}
-
             </div>
-
         </div>
-
     );
-
 }
 
 export default ForgotPassword;
