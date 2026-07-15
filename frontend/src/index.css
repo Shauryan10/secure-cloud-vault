@@ -505,3 +505,35 @@ body {
 .card.wide {
   width: 460px;
 }
+
+/* ── Dashboard tabs ─────────────────────────────────────────────────────────── */
+.dash-tabs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 24px;
+  border-bottom: 2px solid #e5e7eb;
+  padding-bottom: 0;
+}
+
+.dash-tab {
+  padding: 8px 22px;
+  background: transparent;
+  border: none;
+  border-bottom: 3px solid transparent;
+  margin-bottom: -2px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #888;
+  cursor: pointer;
+  transition: color 0.2s, border-color 0.2s;
+}
+
+.dash-tab:hover {
+  color: #3f6212;
+}
+
+.dash-tab.active {
+  color: #3f6212;
+  border-bottom-color: #a3e635;
+}
