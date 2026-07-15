@@ -21,7 +21,7 @@ def get_current_user(
 
     try:
         payload = decode_access_token(token)
-        # JWT sub is now email (changed from username)
+         # JWT sub is now email (changed from username)
         email = payload.get("sub")
 
         if email is None:

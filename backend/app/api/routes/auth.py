@@ -1,7 +1,8 @@
-import random
-import smtplib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
+import io
+import base64
+import pyotp
+import qrcode
+
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -12,8 +13,7 @@ from app.models.user import User
 from app.schemas.user_schema import (
     UserRegister,
     EmailLoginRequest,
-    SendLoginOtpRequest,
-    VerifyLoginOtpRequest,
+    VerifyTotpRequest,
     ForgotPasswordRequest,
     ResetPasswordRequest,
 )
@@ -24,13 +24,12 @@ from app.security.auth import (
     verify_token,
     oauth2_scheme,
 )
-from app.config import settings
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
-OTP_EXPIRY_MINUTES   = 10
-OTP_MAX_ATTEMPTS     = 3
-OTP_LOCKOUT_MINUTES  = 15
+TOTP_MAX_ATTEMPTS    = 3
+TOTP_LOCKOUT_MINUTES = 15
+APP_NAME             = "SecureVault"
 
 
 # ── helpers ───────────────────────────────────────────────────────────────────
@@ -39,41 +38,41 @@ def _now() -> datetime:
     return datetime.now(timezone.utc)
 
 
-def _generate_otp() -> str:
-    return str(random.randint(100000, 999999))
+def _check_lockout(user: User):
+    """Raise 429 if the account is currently locked out."""
+    if user.otp_locked_until and _now() < user.otp_locked_until:
+        remaining = int((user.otp_locked_until - _now()).total_seconds() / 60) + 1
+        raise HTTPException(
+            status_code=429,
+            detail=f"Too many incorrect attempts. Try again in {remaining} minute(s)."
+        )
 
 
-def _send_email(to_email: str, subject: str, html_body: str):
-    msg = MIMEMultipart("alternative")
-    msg["Subject"] = subject
-    msg["From"]    = settings.SMTP_FROM
-    msg["To"]      = to_email
-    msg.attach(MIMEText(html_body, "html"))
+def _record_failed_attempt(user: User, db: Session):
+    """Increment attempt counter; lock account after max attempts."""
+    user.otp_attempts += 1
+    if user.otp_attempts >= TOTP_MAX_ATTEMPTS:
+        user.otp_locked_until = _now() + timedelta(minutes=TOTP_LOCKOUT_MINUTES)
+        user.otp_attempts     = 0
+        db.commit()
+        raise HTTPException(
+            status_code=429,
+            detail=f"Too many incorrect attempts. Account locked for {TOTP_LOCKOUT_MINUTES} minutes."
+        )
+    db.commit()
+    remaining = TOTP_MAX_ATTEMPTS - user.otp_attempts
+    raise HTTPException(
+        status_code=400,
+        detail=f"Incorrect code. {remaining} attempt(s) remaining."
+    )
 
-    with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT) as srv:
-        srv.ehlo()
-        srv.starttls()
-        srv.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
-        srv.sendmail(settings.SMTP_FROM, to_email, msg.as_string())
 
-
-def _otp_email_html(otp: str, purpose: str, expiry_mins: int) -> str:
-    return f"""
-    <html><body style="font-family:Arial,sans-serif;background:#f5f7f5;padding:30px;">
-      <div style="max-width:420px;margin:auto;background:#fff;border:2px solid #a3e635;
-                  border-radius:12px;padding:32px;text-align:center;">
-        <h2 style="color:#3f6212;margin-bottom:6px;">Secure Vault</h2>
-        <p style="color:#666;margin-bottom:24px;">{purpose}</p>
-        <div style="background:#a3e635;border-radius:8px;padding:14px 28px;
-                    display:inline-block;letter-spacing:10px;font-size:1.8rem;
-                    font-weight:700;color:#1a1a1a;">{otp}</div>
-        <p style="color:#888;margin-top:20px;font-size:0.9rem;">
-          Expires in <strong>{expiry_mins} minutes</strong>.<br>
-          Never share this code with anyone.
-        </p>
-      </div>
-    </body></html>
-    """
+def _qr_base64(totp_uri: str) -> str:
+    """Generate a QR code for a provisioning URI and return as base64 PNG."""
+    img = qrcode.make(totp_uri)
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    return base64.b64encode(buf.getvalue()).decode()
 
 
 # ── register ──────────────────────────────────────────────────────────────────
@@ -82,7 +81,6 @@ def _otp_email_html(otp: str, purpose: str, expiry_mins: int) -> str:
 def register(body: UserRegister, db: Session = Depends(get_db)):
     if db.query(User).filter(User.email == body.email).first():
         raise HTTPException(status_code=400, detail="Email already registered.")
-
     if db.query(User).filter(User.username == body.username).first():
         raise HTTPException(status_code=400, detail="Username already taken.")
 
@@ -101,112 +99,87 @@ def register(body: UserRegister, db: Session = Depends(get_db)):
 def login(body: EmailLoginRequest, db: Session = Depends(get_db)):
     """
     Validates email + password.
-    Returns a short-lived 'pre-auth' flag so the frontend knows
-    credentials are correct and can proceed to captcha → OTP.
-    Does NOT return the real access token yet.
+    Returns whether the user has already set up Google Authenticator
+    so the frontend knows whether to show the QR setup screen or just
+    the code input.
     """
     user = db.query(User).filter(User.email == body.email).first()
 
     if not user or not verify_password(body.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Invalid email or password.")
 
-    return {"message": "Credentials verified. Proceed to OTP verification."}
+    return {
+        "message":      "Credentials verified.",
+        "totp_enabled": user.totp_enabled,
+    }
 
 
-# ── step 2: send login OTP ────────────────────────────────────────────────────
+# ── step 2a: first-time setup — generate secret + QR ─────────────────────────
 
-@router.post("/send-login-otp")
-def send_login_otp(body: SendLoginOtpRequest, db: Session = Depends(get_db)):
+@router.post("/setup-totp")
+def setup_totp(body: EmailLoginRequest, db: Session = Depends(get_db)):
+    """
+    Called after captcha passes when the user has NOT yet set up 2FA.
+    Generates a new TOTP secret, persists it (not yet enabled), and
+    returns a base64-encoded QR image for scanning.
+    Requires email + password again to prevent unauthenticated setup.
+    """
     user = db.query(User).filter(User.email == body.email).first()
 
-    # Always return same message (prevents user enumeration)
-    if not user:
-        return {"message": "If that email is registered, an OTP has been sent."}
+    if not user or not verify_password(body.password, user.password_hash):
+        raise HTTPException(status_code=401, detail="Invalid credentials.")
 
-    # Check lockout
-    if user.otp_locked_until and _now() < user.otp_locked_until:
-        remaining = int((user.otp_locked_until - _now()).total_seconds() / 60) + 1
-        raise HTTPException(
-            status_code=429,
-            detail=f"Too many incorrect attempts. Try again in {remaining} minute(s)."
-        )
+    if user.totp_enabled:
+        raise HTTPException(status_code=400, detail="Google Authenticator is already configured.")
 
-    otp    = _generate_otp()
-    expiry = _now() + timedelta(minutes=OTP_EXPIRY_MINUTES)
+    # Generate a fresh secret each time setup is called
+    secret   = pyotp.random_base32()
+    totp_uri = pyotp.totp.TOTP(secret).provisioning_uri(
+        name=user.email,
+        issuer_name=APP_NAME
+    )
 
-    user.otp_code        = otp
-    user.otp_expiry      = expiry
-    user.otp_attempts    = 0
-    user.otp_locked_until = None
+    user.totp_secret  = secret
+    user.totp_enabled = False          # will be flipped True after first verify
     db.commit()
 
-    try:
-        _send_email(
-            user.email,
-            "Your Secure Vault Login OTP",
-            _otp_email_html(otp, "Use this code to complete your login.", OTP_EXPIRY_MINUTES)
-        )
-    except Exception as e:
-        user.otp_code = None
-        user.otp_expiry = None
-        db.commit()
-        raise HTTPException(status_code=502, detail=f"Failed to send OTP email: {str(e)}")
-
-    return {"message": "If that email is registered, an OTP has been sent."}
+    return {
+        "qr_base64": _qr_base64(totp_uri),
+        "secret":    secret,           # shown as manual fallback
+    }
 
 
-# ── step 3: verify login OTP → issue access token ────────────────────────────
+# ── step 2b / step 3: verify TOTP code → issue access token ──────────────────
 
-@router.post("/verify-login-otp")
-def verify_login_otp(body: VerifyLoginOtpRequest, db: Session = Depends(get_db)):
+@router.post("/verify-totp")
+def verify_totp(body: VerifyTotpRequest, db: Session = Depends(get_db)):
+    """
+    Verifies the 6-digit TOTP code from Google Authenticator.
+    - First call (totp_enabled=False): confirms setup and marks it enabled.
+    - Subsequent calls: normal login 2FA check.
+    Issues the real JWT access token on success.
+    """
     user = db.query(User).filter(User.email == body.email).first()
 
-    if not user or not user.otp_code:
-        raise HTTPException(status_code=400, detail="No OTP found. Please request a new one.")
+    if not user or not user.totp_secret:
+        raise HTTPException(status_code=400, detail="TOTP is not configured for this account.")
 
-    # Lockout check
-    if user.otp_locked_until and _now() < user.otp_locked_until:
-        remaining = int((user.otp_locked_until - _now()).total_seconds() / 60) + 1
-        raise HTTPException(
-            status_code=429,
-            detail=f"Account locked. Try again in {remaining} minute(s)."
-        )
+    _check_lockout(user)
 
-    # Expiry check
-    if _now() > user.otp_expiry:
-        user.otp_code    = None
-        user.otp_expiry  = None
-        user.otp_attempts = 0
-        db.commit()
-        raise HTTPException(status_code=400, detail="OTP has expired. Please request a new one.")
+    totp  = pyotp.TOTP(user.totp_secret)
+    valid = totp.verify(body.code.strip(), valid_window=1)
 
-    # Wrong OTP
-    if user.otp_code != body.otp.strip():
-        user.otp_attempts += 1
+    if not valid:
+        _record_failed_attempt(user, db)   # raises HTTPException inside
 
-        if user.otp_attempts >= OTP_MAX_ATTEMPTS:
-            user.otp_locked_until = _now() + timedelta(minutes=OTP_LOCKOUT_MINUTES)
-            user.otp_code         = None
-            user.otp_expiry       = None
-            user.otp_attempts     = 0
-            db.commit()
-            raise HTTPException(
-                status_code=429,
-                detail=f"Too many incorrect attempts. Account locked for {OTP_LOCKOUT_MINUTES} minutes."
-            )
-
-        db.commit()
-        remaining_attempts = OTP_MAX_ATTEMPTS - user.otp_attempts
-        raise HTTPException(
-            status_code=400,
-            detail=f"Incorrect OTP. {remaining_attempts} attempt(s) remaining."
-        )
-
-    # ✅ Correct — issue access token
-    user.otp_code         = None
-    user.otp_expiry       = None
+    # ✅ Code is correct — reset counters
     user.otp_attempts     = 0
     user.otp_locked_until = None
+
+    # First successful verify activates TOTP
+    if not user.totp_enabled:
+        user.totp_enabled = True
+
     db.commit()
 
     token = create_access_token({"sub": user.email})
@@ -238,58 +211,48 @@ def me(
     }
 
 
-# ── forgot password ───────────────────────────────────────────────────────────
+# ── forgot password (TOTP-verified reset) ─────────────────────────────────────
 
 @router.post("/forgot-password")
 def forgot_password(body: ForgotPasswordRequest, db: Session = Depends(get_db)):
+    """
+    If the user has TOTP enabled, they can reset their password using
+    their authenticator app. Returns whether TOTP is configured.
+    """
     user = db.query(User).filter(User.email == body.email).first()
 
+    # Don't reveal whether the email is registered
     if not user:
-        return {"message": "If that email is registered, a reset OTP has been sent."}
+        return {"message": "If that account exists, proceed with your authenticator app.", "totp_enabled": False}
 
-    otp    = _generate_otp()
-    expiry = _now() + timedelta(minutes=OTP_EXPIRY_MINUTES)
+    return {
+        "message":      "Use your authenticator app to verify and reset your password.",
+        "totp_enabled": user.totp_enabled,
+    }
 
-    user.reset_otp_code   = otp
-    user.reset_otp_expiry = expiry
-    db.commit()
-
-    try:
-        _send_email(
-            user.email,
-            "Your Secure Vault Password Reset OTP",
-            _otp_email_html(otp, "Use this code to reset your password.", OTP_EXPIRY_MINUTES)
-        )
-    except Exception as e:
-        user.reset_otp_code   = None
-        user.reset_otp_expiry = None
-        db.commit()
-        raise HTTPException(status_code=502, detail=f"Failed to send email: {str(e)}")
-
-    return {"message": "If that email is registered, a reset OTP has been sent."}
-
-
-# ── reset password ────────────────────────────────────────────────────────────
 
 @router.post("/reset-password")
 def reset_password(body: ResetPasswordRequest, db: Session = Depends(get_db)):
+    """
+    Verifies the TOTP code then sets the new password.
+    """
     user = db.query(User).filter(User.email == body.email).first()
 
-    if not user or not user.reset_otp_code or not user.reset_otp_expiry:
-        raise HTTPException(status_code=400, detail="Invalid or expired OTP.")
+    if not user or not user.totp_secret or not user.totp_enabled:
+        raise HTTPException(status_code=400, detail="TOTP is not set up for this account.")
 
-    if _now() > user.reset_otp_expiry:
-        user.reset_otp_code   = None
-        user.reset_otp_expiry = None
-        db.commit()
-        raise HTTPException(status_code=400, detail="OTP has expired. Please request a new one.")
+    _check_lockout(user)
 
-    if user.reset_otp_code != body.otp.strip():
-        raise HTTPException(status_code=400, detail="Incorrect OTP.")
+    totp  = pyotp.TOTP(user.totp_secret)
+    valid = totp.verify(body.code.strip(), valid_window=1)
 
+    if not valid:
+        _record_failed_attempt(user, db)
+
+    # ✅ Code correct
     user.password_hash    = hash_password(body.new_password)
-    user.reset_otp_code   = None
-    user.reset_otp_expiry = None
+    user.otp_attempts     = 0
+    user.otp_locked_until = None
     db.commit()
 
     return {"message": "Password reset successfully. You can now log in."}

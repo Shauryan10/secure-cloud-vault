@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime
+from sqlalchemy import Column, Integer, String, DateTime, Boolean
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
@@ -15,14 +15,12 @@ class User(Base):
     role          = Column(String(20), default="USER")
     created_at    = Column(DateTime(timezone=True), server_default=func.now())
 
-    # ── login OTP ────────────────────────────────────────────────────────────
-    otp_code        = Column(String(6),  nullable=True)
-    otp_expiry      = Column(DateTime(timezone=True), nullable=True)
-    otp_attempts    = Column(Integer, default=0, nullable=False)
-    otp_locked_until = Column(DateTime(timezone=True), nullable=True)
+    # ── TOTP / Google Authenticator ───────────────────────────────────────────
+    totp_secret      = Column(String(64), nullable=True)   # base32 secret
+    totp_enabled     = Column(Boolean, default=False, nullable=False)
 
-    # ── forgot-password OTP ──────────────────────────────────────────────────
-    reset_otp_code   = Column(String(6),  nullable=True)
-    reset_otp_expiry = Column(DateTime(timezone=True), nullable=True)
+    # ── brute-force lockout (shared for TOTP attempts) ────────────────────────
+    otp_attempts     = Column(Integer, default=0, nullable=False)
+    otp_locked_until = Column(DateTime(timezone=True), nullable=True)
 
     assets = relationship("VaultAsset", back_populates="owner")

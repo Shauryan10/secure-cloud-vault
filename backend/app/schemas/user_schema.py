@@ -2,7 +2,7 @@ import re
 from pydantic import BaseModel, EmailStr, field_validator
 
 
-# ── helpers ──────────────────────────────────────────────────────────────────
+# ── helpers ───────────────────────────────────────────────────────────────────
 
 PASSWORD_RULES = (
     "Password must be at least 8 characters and include "
@@ -40,13 +40,9 @@ class EmailLoginRequest(BaseModel):
     password: str
 
 
-class SendLoginOtpRequest(BaseModel):
+class VerifyTotpRequest(BaseModel):
     email: EmailStr
-
-
-class VerifyLoginOtpRequest(BaseModel):
-    email: EmailStr
-    otp: str
+    code: str          # 6-digit TOTP code from Google Authenticator
 
 
 class ForgotPasswordRequest(BaseModel):
@@ -55,7 +51,7 @@ class ForgotPasswordRequest(BaseModel):
 
 class ResetPasswordRequest(BaseModel):
     email: EmailStr
-    otp: str
+    code: str          # TOTP code used to authorise the reset
     new_password: str
 
     @field_validator("new_password")

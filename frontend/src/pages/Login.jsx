@@ -1,62 +1,99 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useRef } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import api from "../api/api";
 import BrandLogo from "../components/BrandLogo";
 
-// ── math captcha generator ────────────────────────────────────────────────────
-function generateCaptcha() {
-    const a  = Math.floor(Math.random() * 9) + 1;
-    const b  = Math.floor(Math.random() * 9) + 1;
-    const ops = ["+", "-", "×"];
-    const op = ops[Math.floor(Math.random() * ops.length)];
-    let answer;
-    if (op === "+") answer = a + b;
-    else if (op === "-") answer = a - b;
-    else answer = a * b;
-    return { question: `${a} ${op} ${b}`, answer };
+// ── text + number captcha ─────────────────────────────────────────────────────
+const LETTERS  = "ABCDEFGHJKLMNPQRSTUVWXYZ";
+const NUMBERS  = "23456789";
+
+function generateCaptchaText() {
+    // Always 2 uppercase letters + 2 numbers, shuffled
+    const chars = [
+        LETTERS[Math.floor(Math.random() * LETTERS.length)],
+        LETTERS[Math.floor(Math.random() * LETTERS.length)],
+        NUMBERS[Math.floor(Math.random() * NUMBERS.length)],
+        NUMBERS[Math.floor(Math.random() * NUMBERS.length)],
+    ];
+    // Fisher-Yates shuffle
+    for (let i = chars.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [chars[i], chars[j]] = [chars[j], chars[i]];
+    }
+    return chars.join("");
 }
+
+function CaptchaDisplay({ text }) {
+    return (
+        <div style={{
+            display: "flex",
+            justifyContent: "center",
+            gap: "10px",
+            background: "#f7fee7",
+            border: "2px solid #a3e635",
+            borderRadius: "10px",
+            padding: "16px 24px",
+            marginBottom: "16px",
+            userSelect: "none",
+        }}>
+            {text.split("").map((ch, i) => (
+                <span key={i} style={{
+                    fontSize: "1.8rem",
+                    fontWeight: 700,
+                    fontFamily: "monospace",
+                    color: /[0-9]/.test(ch) ? "#2563eb" : "#3f6212",
+                    letterSpacing: "2px",
+                    minWidth: "28px",
+                    textAlign: "center",
+                }}>
+                    {ch}
+                </span>
+            ))}
+        </div>
+    );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 function Login() {
 
     const navigate = useNavigate();
 
-    // ── step: "credentials" | "captcha" | "otp" ──────────────────────────────
-    const [step, setStep]       = useState("credentials");
+    // "credentials" → "captcha" → "totp-setup" | "totp-verify"
+    const [step, setStep]               = useState("credentials");
+    const [email, setEmail]             = useState("");
+    const [password, setPassword]       = useState("");
+    const [totpEnabled, setTotpEnabled] = useState(false);
 
-    // step 1
-    const [email, setEmail]     = useState("");
-    const [password, setPassword] = useState("");
-
-    // step 2 – captcha
-    const [captcha, setCaptcha]       = useState(() => generateCaptcha());
+    // captcha
+    const [captchaText, setCaptchaText]   = useState(() => generateCaptchaText());
     const [captchaInput, setCaptchaInput] = useState("");
     const [captchaError, setCaptchaError] = useState("");
 
-    // step 3 – OTP
-    const [otp, setOtp]           = useState("");
-    const [otpError, setOtpError] = useState("");
-    const [resendCooldown, setResendCooldown] = useState(0);
-    const otpRefs = useRef([]);
+    // TOTP — single hidden input, displayed as 6 boxes
+    const [qrBase64, setQrBase64]   = useState("");
+    const [secret, setSecret]       = useState("");
+    const [totp, setTotp]           = useState("");
+    const [totpError, setTotpError] = useState("");
+    const hiddenInputRef = useRef(null);
 
-    const [error, setError]   = useState("");
+    const [error, setError]     = useState("");
     const [loading, setLoading] = useState(false);
 
-    // cooldown timer for resend
-    useEffect(() => {
-        if (resendCooldown <= 0) return;
-        const t = setTimeout(() => setResendCooldown(c => c - 1), 1000);
-        return () => clearTimeout(t);
-    }, [resendCooldown]);
+    const currentIdx =
+        step === "credentials"            ? 0
+      : step === "captcha"               ? 1
+      : /* totp-setup | totp-verify */     2;
 
-    // ── step 1: verify credentials ────────────────────────────────────────────
+    // ── step 1 ────────────────────────────────────────────────────────────────
     async function handleCredentials(e) {
         e.preventDefault();
         setError("");
         setLoading(true);
         try {
-            await api.post("/auth/login", { email, password });
-            // credentials OK → show captcha
-            setCaptcha(generateCaptcha());
+            const res = await api.post("/auth/login", { email, password });
+            setTotpEnabled(res.data.totp_enabled);
+            setCaptchaText(generateCaptchaText());
             setCaptchaInput("");
             setCaptchaError("");
             setStep("captcha");
@@ -67,88 +104,130 @@ function Login() {
         }
     }
 
-    // ── step 2: solve captcha → send OTP ──────────────────────────────────────
+    // ── step 2 ────────────────────────────────────────────────────────────────
     async function handleCaptcha(e) {
         e.preventDefault();
         setCaptchaError("");
 
-        if (parseInt(captchaInput, 10) !== captcha.answer) {
-            setCaptchaError("Incorrect answer. Try again.");
-            setCaptcha(generateCaptcha());
+        if (captchaInput.trim().toUpperCase() !== captchaText.toUpperCase()) {
+            setCaptchaError("Incorrect. Try again.");
+            setCaptchaText(generateCaptchaText());
             setCaptchaInput("");
             return;
         }
 
         setLoading(true);
         try {
-            await api.post("/auth/send-login-otp", { email });
-            setOtp("");
-            setOtpError("");
-            setResendCooldown(60);
-            setStep("otp");
-            setTimeout(() => otpRefs.current[0]?.focus(), 100);
+            if (totpEnabled) {
+                setTotp("");
+                setTotpError("");
+                setStep("totp-verify");
+                setTimeout(() => hiddenInputRef.current?.focus(), 100);
+            } else {
+                const res = await api.post("/auth/setup-totp", { email, password });
+                setQrBase64(res.data.qr_base64);
+                setSecret(res.data.secret);
+                setTotp("");
+                setTotpError("");
+                setStep("totp-setup");
+                setTimeout(() => hiddenInputRef.current?.focus(), 100);
+            }
         } catch (err) {
-            setError(err.response?.data?.detail || "Failed to send OTP. Try again.");
+            setError(err.response?.data?.detail || "Something went wrong.");
             setStep("credentials");
         } finally {
             setLoading(false);
         }
     }
 
-    // ── step 3: verify OTP ────────────────────────────────────────────────────
-    async function handleOtp(e) {
+    // ── step 3 ────────────────────────────────────────────────────────────────
+    async function handleVerifyTotp(e) {
         e.preventDefault();
-        setOtpError("");
+        setTotpError("");
         setLoading(true);
         try {
-            const res = await api.post("/auth/verify-login-otp", { email, otp });
+            const res = await api.post("/auth/verify-totp", { email, code: totp });
             localStorage.setItem("token", res.data.access_token);
             navigate("/dashboard");
         } catch (err) {
-            const detail = err.response?.data?.detail || "Incorrect OTP.";
-            setOtpError(detail);
-            setOtp("");
-            otpRefs.current[0]?.focus();
+            setTotpError(err.response?.data?.detail || "Incorrect code.");
+            setTotp("");
+            hiddenInputRef.current?.focus();
         } finally {
             setLoading(false);
         }
     }
 
-    // OTP input: split into 6 boxes
-    function handleOtpInput(val, idx) {
-        const digits = val.replace(/\D/g, "").slice(0, 1);
-        const arr    = otp.split("").concat(Array(6).fill("")).slice(0, 6);
-        arr[idx]     = digits;
-        const joined = arr.join("");
-        setOtp(joined);
-        if (digits && idx < 5) otpRefs.current[idx + 1]?.focus();
-    }
+    function TotpCodeForm({ onSubmit, hint }) {
+        return (
+            <form onSubmit={onSubmit}>
+                <p style={{ textAlign: "center", color: "#555", fontSize: "0.88rem", marginBottom: "16px" }}>
+                    {hint}
+                </p>
+                {totpError && <p className="error">{totpError}</p>}
 
-    function handleOtpKeyDown(e, idx) {
-        if (e.key === "Backspace" && !otp[idx] && idx > 0) {
-            otpRefs.current[idx - 1]?.focus();
-        }
-    }
+                {/* ── 6-box display backed by a single hidden input ── */}
+                <div
+                    style={{ position: "relative", cursor: "text" }}
+                    onClick={() => hiddenInputRef.current?.focus()}
+                >
+                    {/* hidden real input */}
+                    <input
+                        ref={hiddenInputRef}
+                        type="tel"
+                        inputMode="numeric"
+                        maxLength={6}
+                        value={totp}
+                        onChange={e => setTotp(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                        autoFocus
+                        autoComplete="one-time-code"
+                        style={{
+                            position: "absolute",
+                            opacity: 0,
+                            width: "100%",
+                            height: "100%",
+                            top: 0, left: 0,
+                            cursor: "text",
+                            zIndex: 1,
+                        }}
+                    />
 
-    async function resendOtp() {
-        if (resendCooldown > 0) return;
-        setLoading(true);
-        setOtpError("");
-        try {
-            await api.post("/auth/send-login-otp", { email });
-            setOtp("");
-            setResendCooldown(60);
-        } catch (err) {
-            setOtpError(err.response?.data?.detail || "Failed to resend OTP.");
-        } finally {
-            setLoading(false);
-        }
-    }
+                    {/* visible boxes */}
+                    <div className="otp-boxes" style={{ pointerEvents: "none" }}>
+                        {Array.from({ length: 6 }).map((_, i) => (
+                            <div
+                                key={i}
+                                className={`otp-box ${totp.length === i ? "otp-box-active" : ""}`}
+                                style={{
+                                    display: "flex",
+                                    alignItems: "center",
+                                    justifyContent: "center",
+                                }}
+                            >
+                                {totp[i] || ""}
+                            </div>
+                        ))}
+                    </div>
+                </div>
 
-    // ── step dots ─────────────────────────────────────────────────────────────
-    const steps      = ["credentials", "captcha", "otp"];
-    const stepLabels = ["Credentials", "Verify", "OTP"];
-    const currentIdx = steps.indexOf(step);
+                <button
+                    type="submit"
+                    disabled={loading || totp.length < 6}
+                    style={{ marginTop: "16px" }}
+                >
+                    {loading ? "Verifying…" : "Verify Code"}
+                </button>
+                <p>
+                    <span
+                        onClick={() => { setStep("captcha"); setTotpError(""); setTotp(""); }}
+                        style={{ color: "#65a30d", cursor: "pointer", fontWeight: 600 }}
+                    >
+                        ← Back
+                    </span>
+                </p>
+            </form>
+        );
+    }
 
     return (
         <div className="auth-container">
@@ -158,24 +237,23 @@ function Login() {
 
                 {/* step indicator */}
                 <div className="step-indicator">
-                    {steps.map((s, i) => (
-                        <div key={s} className="step-item">
+                    {["Credentials", "Verify", "2FA"].map((label, i) => (
+                        <div key={label} className="step-item">
                             <div className={`step-dot ${i <= currentIdx ? "active" : ""}`}>
                                 {i < currentIdx ? "✓" : i + 1}
                             </div>
                             <span className={`step-label ${i <= currentIdx ? "active" : ""}`}>
-                                {stepLabels[i]}
+                                {label}
                             </span>
                         </div>
                     ))}
                 </div>
 
-                {/* ── STEP 1: Credentials ── */}
+                {/* ── STEP 1 ── */}
                 {step === "credentials" && (
                     <form onSubmit={handleCredentials}>
                         <h3>Sign in to your account</h3>
                         {error && <p className="error">{error}</p>}
-
                         <input
                             type="email"
                             placeholder="Email address"
@@ -192,42 +270,67 @@ function Login() {
                             autoComplete="current-password"
                             required
                         />
-
                         <button type="submit" disabled={loading}>
                             {loading ? "Verifying…" : "Continue"}
                         </button>
-
                         <p>Don't have an account?{" "}<Link to="/register">Register here</Link></p>
                         <p><Link to="/forgot-password">Forgot password?</Link></p>
                     </form>
                 )}
 
-                {/* ── STEP 2: Captcha ── */}
+                {/* ── STEP 2: Text captcha ── */}
                 {step === "captcha" && (
                     <form onSubmit={handleCaptcha}>
                         <h3>Human verification</h3>
-                        <p style={{ textAlign: "center", color: "#555", fontSize: "0.9rem", marginBottom: "20px" }}>
-                            Solve this to continue
+                        <p style={{ textAlign: "center", color: "#555", fontSize: "0.85rem", marginBottom: "16px" }}>
+                            Type the 4 characters shown below<br />
+                            <span style={{ color: "#999", fontSize: "0.78rem" }}>
+                                🟢 green = letters &nbsp;·&nbsp; 🔵 blue = numbers &nbsp;·&nbsp; not case-sensitive
+                            </span>
                         </p>
 
-                        <div className="captcha-box">
-                            <span className="captcha-question">{captcha.question} = ?</span>
-                        </div>
+                        <CaptchaDisplay text={captchaText} />
 
                         {captchaError && <p className="error">{captchaError}</p>}
 
-                        <input
-                            type="number"
-                            placeholder="Your answer"
-                            value={captchaInput}
-                            onChange={e => setCaptchaInput(e.target.value)}
-                            style={{ textAlign: "center", fontSize: "1.1rem", letterSpacing: "4px" }}
-                            required
-                            autoFocus
-                        />
+                        <div style={{ display: "flex", gap: "8px", alignItems: "center", marginBottom: "16px" }}>
+                            <input
+                                placeholder="Type the 4 characters above"
+                                value={captchaInput}
+                                onChange={e => setCaptchaInput(e.target.value)}
+                                style={{ marginBottom: 0, flex: 1, textTransform: "uppercase", letterSpacing: "4px", textAlign: "center", fontSize: "1.1rem" }}
+                                maxLength={4}
+                                autoFocus
+                                required
+                                autoComplete="off"
+                                spellCheck={false}
+                            />
+                            <button
+                                type="button"
+                                title="Generate new captcha"
+                                onClick={() => {
+                                    setCaptchaText(generateCaptchaText());
+                                    setCaptchaInput("");
+                                    setCaptchaError("");
+                                }}
+                                style={{
+                                    width: "42px", height: "44px", padding: 0,
+                                    background: "#f7fee7",
+                                    border: "1.5px solid #a3e635",
+                                    borderRadius: "6px",
+                                    cursor: "pointer",
+                                    fontSize: "1.2rem",
+                                    color: "#65a30d",
+                                    flexShrink: 0,
+                                    lineHeight: 1,
+                                }}
+                            >
+                                ↺
+                            </button>
+                        </div>
 
-                        <button type="submit" disabled={loading}>
-                            {loading ? "Sending OTP…" : "Verify & Send OTP"}
+                        <button type="submit" disabled={loading || !captchaInput.trim()}>
+                            {loading ? "Loading…" : "Continue"}
                         </button>
 
                         <p>
@@ -241,56 +344,59 @@ function Login() {
                     </form>
                 )}
 
-                {/* ── STEP 3: OTP ── */}
-                {step === "otp" && (
-                    <form onSubmit={handleOtp}>
-                        <h3>Enter your OTP</h3>
-                        <p style={{ textAlign: "center", color: "#555", fontSize: "0.88rem", marginBottom: "20px" }}>
-                            A 6-digit code was sent to<br />
-                            <strong style={{ color: "#3f6212" }}>{email}</strong>
+                {/* ── STEP 3a: First-time TOTP setup ── */}
+                {step === "totp-setup" && (
+                    <div>
+                        <h3>Set up Google Authenticator</h3>
+                        <p style={{ textAlign: "center", color: "#555", fontSize: "0.85rem", marginBottom: "16px" }}>
+                            Scan this QR code with <strong>Google Authenticator</strong>,
+                            then enter the 6-digit code to confirm.
                         </p>
-
-                        {otpError && <p className="error">{otpError}</p>}
-
-                        <div className="otp-boxes">
-                            {Array.from({ length: 6 }).map((_, i) => (
-                                <input
-                                    key={i}
-                                    ref={el => otpRefs.current[i] = el}
-                                    type="text"
-                                    inputMode="numeric"
-                                    maxLength={1}
-                                    value={otp[i] || ""}
-                                    onChange={e => handleOtpInput(e.target.value, i)}
-                                    onKeyDown={e => handleOtpKeyDown(e, i)}
-                                    className="otp-box"
+                        {qrBase64 && (
+                            <div style={{ textAlign: "center", marginBottom: "14px" }}>
+                                <img
+                                    src={`data:image/png;base64,${qrBase64}`}
+                                    alt="TOTP QR Code"
+                                    style={{
+                                        width: "180px", height: "180px",
+                                        border: "3px solid #a3e635",
+                                        borderRadius: "10px",
+                                        padding: "6px",
+                                        background: "#fff",
+                                    }}
                                 />
-                            ))}
-                        </div>
+                            </div>
+                        )}
+                        <details style={{ marginBottom: "14px" }}>
+                            <summary style={{ fontSize: "0.8rem", color: "#65a30d", cursor: "pointer", textAlign: "center" }}>
+                                Can't scan? Enter key manually
+                            </summary>
+                            <div style={{
+                                background: "#f7fee7", border: "1px solid #a3e635",
+                                borderRadius: "6px", padding: "10px", marginTop: "8px",
+                                fontFamily: "monospace", fontSize: "0.85rem",
+                                wordBreak: "break-all", textAlign: "center",
+                                color: "#3f6212", letterSpacing: "2px",
+                            }}>
+                                {secret}
+                            </div>
+                        </details>
+                        <TotpCodeForm
+                            onSubmit={handleVerifyTotp}
+                            hint="Enter the 6-digit code shown in your authenticator app."
+                        />
+                    </div>
+                )}
 
-                        <button
-                            type="submit"
-                            disabled={loading || otp.replace(/\s/g, "").length < 6}
-                            style={{ marginTop: "12px" }}
-                        >
-                            {loading ? "Verifying…" : "Verify OTP"}
-                        </button>
-
-                        <p style={{ marginTop: "14px" }}>
-                            {resendCooldown > 0 ? (
-                                <span style={{ color: "#aaa", fontSize: "0.88rem" }}>
-                                    Resend in {resendCooldown}s
-                                </span>
-                            ) : (
-                                <span
-                                    onClick={resendOtp}
-                                    style={{ color: "#65a30d", cursor: "pointer", fontWeight: 600, fontSize: "0.88rem" }}
-                                >
-                                    Resend OTP
-                                </span>
-                            )}
-                        </p>
-                    </form>
+                {/* ── STEP 3b: TOTP verify (returning user) ── */}
+                {step === "totp-verify" && (
+                    <div>
+                        <h3>Two-factor authentication</h3>
+                        <TotpCodeForm
+                            onSubmit={handleVerifyTotp}
+                            hint="Open Google Authenticator and enter the 6-digit code for Secure Vault."
+                        />
+                    </div>
                 )}
 
             </div>

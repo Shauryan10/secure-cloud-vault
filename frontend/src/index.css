@@ -421,26 +421,29 @@ body {
   margin-bottom: 4px;
 }
 
+/* boxes are now plain divs — styled to look like inputs */
 .otp-box {
-  width: 44px !important;
+  width: 44px;
   height: 52px;
   text-align: center;
-  font-size: 1.4rem;
+  font-size: 1.5rem;
   font-weight: 700;
-  border: 2px solid #a3e635 !important;
-  border-radius: 8px !important;
-  background: #f9fafb !important;
-  color: #1a1a1a !important;
-  padding: 0 !important;
-  margin-bottom: 0 !important;
-  outline: none;
-  transition: box-shadow 0.2s, border-color 0.2s;
+  border: 2px solid #a3e635;
+  border-radius: 8px;
+  background: #f9fafb;
+  color: #1a1a1a;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: border-color 0.15s, box-shadow 0.15s;
+  user-select: none;
 }
 
-.otp-box:focus {
-  box-shadow: 0 0 0 3px rgba(163, 230, 53, 0.35) !important;
-  background: #fff !important;
-  border-color: #65a30d !important;
+/* active box = the one about to receive the next digit */
+.otp-box-active {
+  border-color: #65a30d;
+  background: #fff;
+  box-shadow: 0 0 0 3px rgba(163, 230, 53, 0.35);
 }
 
 /* ── Password strength ──────────────────────────────────────────────────────── */
