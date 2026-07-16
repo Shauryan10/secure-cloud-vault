@@ -2,6 +2,8 @@ import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import api from "../api/api";
 import BrandLogo from "../components/BrandLogo";
+import PasswordInput from "../components/PasswordInput";
+import AuthLayout from "../components/AuthLayout";
 
 // ── password rule checker ─────────────────────────────────────────────────────
 const rules = [
@@ -93,8 +95,8 @@ function Register() {
     }
 
     return (
-        <div className="auth-container">
-            <form className="card" onSubmit={handleRegister}>
+        <AuthLayout>
+            <form className="card" style={{ width: "100%", maxWidth: "400px", boxShadow: "none" }} onSubmit={handleRegister}>
 
                 <BrandLogo />
                 <h3>Create a new account</h3>
@@ -116,8 +118,7 @@ function Register() {
                     required
                 />
 
-                <input
-                    type="password"
+                <PasswordInput
                     placeholder="Password"
                     value={password}
                     onChange={e => {
@@ -131,8 +132,7 @@ function Register() {
                 {/* live password strength shown as soon as user types */}
                 {showRules && <PasswordStrength password={password} />}
 
-                <input
-                    type="password"
+                <PasswordInput
                     placeholder="Confirm Password"
                     value={confirm}
                     onChange={e => setConfirm(e.target.value)}
@@ -150,7 +150,7 @@ function Register() {
                 </p>
 
             </form>
-        </div>
+        </AuthLayout>
     );
 }
 

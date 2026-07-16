@@ -12,10 +12,123 @@ body {
 
 /* ── Auth pages (Login / Register) ── */
 .auth-container {
-  height: 100vh;
+  min-height: 100vh;
   display: flex;
   justify-content: center;
   align-items: center;
+}
+
+/* two-column layout: left panel + right card */
+.auth-layout {
+  display: flex;
+  width: 100%;
+  min-height: 100vh;
+}
+
+/* ── Left decorative panel ── */
+.auth-panel {
+  flex: 1;
+  background: linear-gradient(145deg, #f0fdf4 0%, #dcfce7 50%, #f7fee7 100%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 40px;
+  gap: 32px;
+  border-right: 2px solid #d9f99d;
+  position: relative;
+  overflow: hidden;
+}
+
+/* large faint lock watermark behind content */
+.auth-panel::before {
+  content: "";
+  position: absolute;
+  width: 420px;
+  height: 420px;
+  border-radius: 50%;
+  background: rgba(163, 230, 53, 0.08);
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.auth-panel-lock {
+  position: relative;
+  z-index: 1;
+}
+
+.auth-panel-text {
+  text-align: center;
+  position: relative;
+  z-index: 1;
+}
+
+.auth-panel-text h1 {
+  font-size: 2rem;
+  font-weight: 800;
+  color: #1a1a1a;
+  line-height: 1.2;
+  margin-bottom: 12px;
+}
+
+.auth-panel-text h1 span {
+  color: #65a30d;
+}
+
+.auth-panel-text p {
+  color: #555;
+  font-size: 0.95rem;
+  line-height: 1.6;
+  max-width: 320px;
+}
+
+.auth-panel-features {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  position: relative;
+  z-index: 1;
+}
+
+.auth-feature-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(255,255,255,0.7);
+  border: 1px solid #bbf7d0;
+  border-radius: 8px;
+  padding: 10px 16px;
+  font-size: 0.88rem;
+  color: #166534;
+  font-weight: 500;
+}
+
+.auth-feature-item span.icon {
+  font-size: 1.1rem;
+}
+
+/* ── Right card panel ── */
+.auth-card-side {
+  width: 480px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 32px;
+  background: #fff;
+}
+
+/* hide left panel on small screens */
+@media (max-width: 768px) {
+  .auth-panel { display: none; }
+  .auth-card-side {
+    width: 100%;
+    min-height: 100vh;
+    padding: 32px 20px;
+    background: #f5f7f5;
+  }
 }
 
 .card {

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import api from "../api/api";
 import BrandLogo from "../components/BrandLogo";
+import AuthLayout from "../components/AuthLayout";
 
 function ForgotPassword() {
 
@@ -51,8 +52,8 @@ function ForgotPassword() {
     }
 
     return (
-        <div className="auth-container">
-            <div className="card">
+        <AuthLayout>
+            <div className="card" style={{ width: "100%", maxWidth: "400px", boxShadow: "none" }}>
 
                 <BrandLogo />
                 <h3>{step === 1 ? "Forgot your password?" : "Enter OTP & new password"}</h3>
@@ -130,7 +131,7 @@ function ForgotPassword() {
                     </form>
                 )}
             </div>
-        </div>
+        </AuthLayout>
     );
 }
 

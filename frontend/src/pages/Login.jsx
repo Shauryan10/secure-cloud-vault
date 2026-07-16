@@ -2,6 +2,8 @@ import { useState, useRef } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import api from "../api/api";
 import BrandLogo from "../components/BrandLogo";
+import PasswordInput from "../components/PasswordInput";
+import AuthLayout from "../components/AuthLayout";
 
 // ── text + number captcha ─────────────────────────────────────────────────────
 const LETTERS  = "ABCDEFGHJKLMNPQRSTUVWXYZ";
@@ -230,8 +232,8 @@ function Login() {
     }
 
     return (
-        <div className="auth-container">
-            <div className="card">
+        <AuthLayout>
+            <div className="card" style={{ width: "100%", maxWidth: "400px", boxShadow: "none", border: "2px solid #a3e635" }}>
 
                 <BrandLogo />
 
@@ -262,8 +264,7 @@ function Login() {
                             autoComplete="email"
                             required
                         />
-                        <input
-                            type="password"
+                        <PasswordInput
                             placeholder="Password"
                             value={password}
                             onChange={e => setPassword(e.target.value)}
@@ -400,7 +401,7 @@ function Login() {
                 )}
 
             </div>
-        </div>
+        </AuthLayout>
     );
 }
 
