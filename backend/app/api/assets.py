@@ -238,7 +238,7 @@ def get_logs(
             "file_size":    l.file_size,
             "content_type": l.content_type,
             "ip_address":   l.ip_address,
-            "created_at":   l.created_at.isoformat(),
+            "created_at":   l.created_at.isoformat() + "Z",
         }
         for l in logs
     ]
