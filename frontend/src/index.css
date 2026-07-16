@@ -537,3 +537,9 @@ body {
   color: #3f6212;
   border-bottom-color: #a3e635;
 }
+
+/* ── Toast slide-in animation ───────────────────────────────────────────────── */
+@keyframes slideIn {
+  from { opacity: 0; transform: translateX(40px); }
+  to   { opacity: 1; transform: translateX(0);    }
+}
